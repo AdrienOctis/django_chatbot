@@ -1,0 +1,290 @@
+
+{% extends 'base.html' %}
+
+{% block styles %}
+<style>
+    body, html {
+      height: 100%;
+    }
+
+    .card-body {
+      padding: 5px; /* Reduce padding inside the card body */
+    }
+
+    .messages-box {
+      margin-top: 5px; /* Reduce the margin above the messages list */
+    }
+
+    .form-group {
+      margin-bottom: 5px; /* Reduce the space between the input fields */
+    }
+
+    .messages-list {
+      margin: 0;
+      padding: 0;
+    }
+
+    .message {
+      margin-bottom: 15px;
+      list-style: none;
+    }
+
+    .message-text {
+      padding: 10px;
+      border-radius: 5px;
+    }
+
+    /* .sent {
+      background-color: #dcf8c6;
+      align-self: flex-end;
+    }
+
+    .received {
+      background-color: #f1f0f0;
+      align-self: flex-start;
+    } */
+
+    .sent {
+    background-color: #dcf8c6;
+    align-self: flex-end;
+    margin-bottom: 15px; /* Add consistent spacing below the user's message */
+    }
+
+    .received {
+      background-color: #f1f0f0;
+      align-self: flex-start;
+      margin-bottom: 15px; /* Ensure consistent spacing for received messages as well */
+    }
+
+    .message-form {
+      display: flex;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 10px;
+      background-color: #f8f9fa;
+    }
+
+    .message-input {
+      flex: 1;
+      border-radius: 0;
+      border-right: none;
+    }
+
+    .btn-send {
+      border-radius: 0;
+    }
+
+    .chat-container {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .response-container {
+    display: flex;
+    gap: 10px; /* Space between the two responses */
+    margin-top: 10px;
+    margin-bottom: 15px; /* Space below the response container */
+    }
+
+    .response-box {
+      flex: 1;
+      padding: 10px;
+      border-radius: 5px;
+      background-color: #f1f0f0;
+    }
+
+    .response-box .message-sender {
+      font-weight: bold;
+    }
+  </style>
+{% endblock %}
+
+
+{% block content %}
+<div class="chat-container">
+  <div class="card flex-grow-1">
+    <div class="card-header bg-primary text-white">Chat</div>
+    {% if user.is_authenticated %}
+      <div class="card-header bg-primary text-white"><b>Welcome {{ user.username }}!</b>  <a style="color: yellow" href="chatbot/streaming">Streaming Chatbot</a>  <a style="color: yellow" href="logout">Logout</a></div>
+    {% else %}
+      <div class="card-header bg-primary text-white"><a style="color: yellow" href="login">Login</a>  <a style="color: yellow" href="register">Register</a>  <a style="color: yellow" href="chatbot-streaming">Streaming Chatbot</a></div>
+    {% endif %}
+    <!-- Input fields for model names -->
+    <div class="card-body">
+      <form id="model-form">
+        <div class="form-group">
+          <label for="model1">Model 1:</label>
+          <input type="text" id="model1" class="form-control" placeholder="Enter first model name" value="o3-mini">
+        </div>
+        <div class="form-group">
+          <label for="model2">Model 2:</label>
+          <input type="text" id="model2" class="form-control" placeholder="Enter second model name" value="gpt-3.5-turbo">
+        </div>
+      </form>
+    </div>
+
+    <div class="card-body messages-box">
+      <ul class="list-unstyled messages-list">
+        <li class="message received">
+          <div class="message-text">
+            <div class="message-sender">
+              <b>AI Chatbot</b>
+            </div>
+            <div class="message-content">
+              Hi {{ user.username }}, I am your AI Chatbot, you can ask me anything.
+            </div>
+          </div>
+        </li>
+      </ul>
+      <!-- <ul class="list-unstyled messages-list">
+      {% for chat in chats %}
+        {% if chat.user == request.user %}
+          <li class="message sent">
+            <div class="message-text">
+              <div class="message-sender">
+                <b>You</b>
+              </div>
+              <div class="message-content">
+                {{ chat.message }}
+              </div>
+            </div>
+          </li>
+          <li class="message received">
+            <div class="message-text">
+              <div class="message-sender">
+                <b>AI Chatbot</b>
+              </div>
+              <div class="message-content">
+                {{ chat.response }}
+              </div>
+            </div>
+          </li>
+          
+        {% endif %}
+      {% endfor %}
+      </ul> -->
+    </div>
+  </div>
+  <form class="message-form">
+    {%csrf_token%}
+    <div class="input-group">
+      <input type="text" class="form-control message-input" placeholder="Type your message...">
+      <div class="input-group-append">
+        <button type="submit" class="btn btn-primary btn-send">Send</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<script>
+  const messagesList = document.querySelector('.messages-list');
+  const messageForm = document.querySelector('.message-form');
+  const messageInput = document.querySelector('.message-input');
+  const modelForm = document.querySelector('#model-form');
+  const model1Input = document.querySelector('#model1');
+  const model2Input = document.querySelector('#model2');
+
+  messageForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+
+    const message = messageInput.value.trim();
+    const model1 = model1Input.value.trim();
+    const model2 = model2Input.value.trim();
+
+    if (message.length === 0 || model1.length === 0 || model2.length === 0) {
+      alert("Please enter a message and both model names.");
+      return;
+    }
+
+    const messageItem = document.createElement('li');
+    messageItem.classList.add('message', 'sent');
+    messageItem.innerHTML = `
+          <div class="message-text">
+            <div class="message-sender">
+              <b>You</b>
+            </div>
+            <div class="message-content">
+              ${message}
+            </div>
+          </div>`;
+    messagesList.appendChild(messageItem);
+
+    messageInput.value = '';
+
+    fetch('', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        'csrfmiddlewaretoken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+        'message': message,
+        'model1': model1,
+        'model2': model2
+      })
+    })
+      .then(response => response.json())
+      .then(data => {
+        const responseModel1 = data.response1;
+        const responseModel2 = data.response2;
+
+        // Create a container for both responses
+        const responseContainer = document.createElement('div');
+        responseContainer.classList.add('response-container');
+
+        // Create the first response box
+        const responseBox1 = document.createElement('div');
+        responseBox1.classList.add('response-box');
+        responseBox1.innerHTML = `
+          <div class="message-sender">AI Chatbot (${model1})</div>
+          <div class="message-content">${responseModel1}</div>
+        `;
+
+        // Create the second response box
+        const responseBox2 = document.createElement('div');
+        responseBox2.classList.add('response-box');
+        responseBox2.innerHTML = `
+          <div class="message-sender">AI Chatbot (${model2})</div>
+          <div class="message-content">${responseModel2}</div>
+        `;
+
+        // Append both response boxes to the container
+        responseContainer.appendChild(responseBox1);
+        responseContainer.appendChild(responseBox2);
+
+        // Append the container to the messages list
+        messagesList.appendChild(responseContainer);
+        });
+    
+    // fetch('', {
+    //   method: 'POST',
+    //   headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    //   body: new URLSearchParams({
+    //     'csrfmiddlewaretoken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+    //     'message': message
+    //   })
+    // })
+    //   .then(response => response.json())
+    //   .then(data => {
+    //     const response = data.response;
+    //     const messageItem = document.createElement('li');
+    //     messageItem.classList.add('message', 'received');
+    //     messageItem.innerHTML = `
+    //     <div class="message-text">
+    //       <div class="message-sender">
+    //         <b>AI Chatbot</b>
+    //       </div>
+    //       <div class="message-content">
+    //         ${response}
+    //       </div>
+    //     </div>
+    //       `;
+    //     messagesList.appendChild(messageItem)
+    //   })
+  });
+
+
+</script>
+
+{% endblock %}
