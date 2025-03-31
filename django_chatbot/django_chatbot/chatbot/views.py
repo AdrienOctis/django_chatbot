@@ -9,6 +9,18 @@ from django.contrib import auth
 from django.contrib.auth.models import User
 from .models import Chat
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.csrf import csrf_exempt
+import time
+
+import uuid
+from django.core.files.storage import default_storage
+from django.core.files.base import ContentFile
+from langchain.document_loaders import PyPDFLoader
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.vectorstores import FAISS
+from celery.result import AsyncResult
+from .tasks import process_pdf_task
+
 
 load_dotenv()
 
@@ -55,29 +67,58 @@ def ask_openai_stream(message: str, model: str = "gpt-4o"):
         messages=[{"role": "user", "content": message}],
         stream=True  # Enable streaming
     )
-    print(response)
-    for chunk in response:
-        content_chunk = chunk.choices[0].delta.content
-        yield content_chunk  # Yield the content of the chunk
+    return response
 
-    # for chunk in response:
-    #     if hasattr(chunk.choices[0].delta, "content"):
-    #         print(chunk.choices[0].delta.content, end="", flush=True)
+# Stream responses from the OpenAI API
+def stream_response(message, user_id):
+    for chunk in ask_openai_stream(message, model="gpt-3.5-turbo"):
+        if stop_signals.get(user_id, False):
+            break
+        if chunk.choices[0].finish_reason == "stop":
+            return
+        content_chunk = chunk.choices[0].delta.content
+        yield content_chunk
+        time.sleep(0.2)
+
+# def stream_response(message):
+#     for char in message:
+#         time.sleep(0.2)
+#         yield f'{char}  '
 
 from django.http import StreamingHttpResponse
+
+stop_signals = {}  # Dictionary to track stop signals per user
+
+# def stream_response(message, user_id):
+#     for char in message:
+#         if stop_signals.get(user_id, False):
+#             break  # Stop streaming if stop signal is received
+#         yield char
+#         time.sleep(0.2)
 
 @login_required(login_url="login")
 def chatbot_streaming(request):
     if request.method == 'POST':
-        message = request.POST.get('message')
-
-        # Stream responses from the OpenAI API
-        def stream_response():
-            for content_chunk in ask_openai_stream(message, model="gpt-3.5-turbo"):
-                yield content_chunk
-
-        return StreamingHttpResponse(stream_response(), content_type='text/plain')
+        user_id = request.user.id  # Identify user session
+        stop_signals[user_id] = False  # Reset stop signal
+        message = request.POST.get('message', '')
+        return StreamingHttpResponse(stream_response(message, user_id), content_type='text/plain')
     return render(request, 'chatbot_streaming.html')
+
+@csrf_exempt  # Disable CSRF for this simple stop request
+def stop_chatbot(request):
+    if request.method == 'POST':
+        user_id = request.user.id
+        stop_signals[user_id] = True  # Set stop signal
+        return StreamingHttpResponse("Stopped", content_type='text/plain')
+
+# @login_required(login_url="login")
+# def chatbot_streaming(request):
+#     if request.method == 'POST':
+#         message = request.POST.get('message')
+#         return StreamingHttpResponse(stream_response(message), content_type='text/plain')
+    
+#     return render(request, 'chatbot_streaming.html')
 
 def login(request):
     if request.method == 'POST':
@@ -116,3 +157,62 @@ def register(request):
 def logout(request):
     auth.logout(request)
     return redirect('login')
+
+UPLOAD_DIR = r"C:\Users\AdrienSERVENTI\OneDrive - Ekimetrics\Documents\Dossier dev\django_chatbot\django_chatbot\uploads"
+VECTOR_DB_PATH = r"C:\Users\AdrienSERVENTI\OneDrive - Ekimetrics\Documents\Dossier dev\django_chatbot\django_chatbot\vectore_store"
+
+# @csrf_exempt
+# def upload_pdf(request):    
+#     if request.method == "POST" and request.FILES.get("file"):
+#         file = request.FILES["file"]
+#         file_path = os.path.join(UPLOAD_DIR, str(uuid.uuid4()) + ".pdf")
+        
+#         os.makedirs(UPLOAD_DIR, exist_ok=True)
+        
+#         with default_storage.open(file_path, "wb+") as destination:
+#             for chunk in file.chunks():
+#                 destination.write(chunk)
+        
+#         process_pdf(file_path)
+#         return JsonResponse({"message": "File uploaded and processed successfully!"})
+    
+#     return render(request, "upload.html")
+
+
+# def process_pdf(file_path):
+#     loader = PyPDFLoader(file_path)
+#     documents = loader.load()
+#     text_chunks = [doc.page_content for doc in documents]
+    
+#     embeddings = OpenAIEmbeddings()
+#     vector_store = FAISS.from_texts(text_chunks, embeddings)
+    
+#     os.makedirs(VECTOR_DB_PATH, exist_ok=True)
+#     vector_store.save_local(VECTOR_DB_PATH)
+
+@csrf_exempt
+def upload_pdf(request):
+    if request.method == "GET":
+        return render(request, "upload.html")
+    
+    if request.method == "POST" and request.FILES.get("file"):
+        file = request.FILES["file"]
+        file_path = os.path.join(UPLOAD_DIR, str(uuid.uuid4()) + ".pdf")
+        
+        os.makedirs(UPLOAD_DIR, exist_ok=True)
+        
+        with default_storage.open(file_path, "wb+") as destination:
+            for chunk in file.chunks():
+                destination.write(chunk)
+        
+        task = process_pdf_task.delay(file_path)
+        return JsonResponse({"message": "File uploaded successfully!", "task_id": task.id})
+    
+    return JsonResponse({"error": "Invalid request"}, status=400)
+
+def check_task_status(request, task_id):
+    task = AsyncResult(task_id)
+    return JsonResponse({"task_id": task_id, "status": task.status})
+
+
+

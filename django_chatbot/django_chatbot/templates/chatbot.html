@@ -76,10 +76,23 @@
       border-radius: 0;
     }
 
-    .chat-container {
+    /* .chat-container {
       height: 100%;
       display: flex;
       flex-direction: column;
+    } */
+
+    .chat-container {
+    display: flex;
+    flex-direction: column;
+    gap: 5px; /* Controls spacing between children */
+    } 
+
+    .form-grouped {
+    display: flex;
+    gap: 10px; /* Space between the two responses */
+    margin-top: 10px;
+    /* margin-bottom: 15px; Space below the response container */
     }
 
     .response-container {
@@ -108,20 +121,22 @@
   <div class="card flex-grow-1">
     <div class="card-header bg-primary text-white">Chat</div>
     {% if user.is_authenticated %}
-      <div class="card-header bg-primary text-white"><b>Welcome {{ user.username }}!</b>  <a style="color: yellow" href="chatbot/streaming">Streaming Chatbot</a>  <a style="color: yellow" href="logout">Logout</a></div>
+      <div class="card-header bg-primary text-white"><b>Welcome {{ user.username }}!</b>  <a style="color: yellow" href="chatbot/streaming">Streaming Chatbot</a>  <a style="color: yellow" href="upload">PDF Loader</a>  <a style="color: yellow" href="logout">Logout</a></div>
     {% else %}
       <div class="card-header bg-primary text-white"><a style="color: yellow" href="login">Login</a>  <a style="color: yellow" href="register">Register</a>  <a style="color: yellow" href="chatbot-streaming">Streaming Chatbot</a></div>
     {% endif %}
     <!-- Input fields for model names -->
     <div class="card-body">
       <form id="model-form">
-        <div class="form-group">
-          <label for="model1">Model 1:</label>
-          <input type="text" id="model1" class="form-control" placeholder="Enter first model name" value="o3-mini">
-        </div>
-        <div class="form-group">
-          <label for="model2">Model 2:</label>
-          <input type="text" id="model2" class="form-control" placeholder="Enter second model name" value="gpt-3.5-turbo">
+        <div class="form-grouped">
+          <div class="form-group">
+            <label for="model1">Model 1:</label>
+            <input type="text" id="model1" class="form-control" placeholder="Enter first model name" value="o3-mini">
+          </div>
+          <div class="form-group">
+            <label for="model2">Model 2:</label>
+            <input type="text" id="model2" class="form-control" placeholder="Enter second model name" value="gpt-3.5-turbo">
+          </div>
         </div>
       </form>
     </div>
